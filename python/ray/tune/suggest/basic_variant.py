@@ -42,7 +42,7 @@ class BasicVariantGenerator(SearchAlgorithm):
         searcher.is_finished == True
     """
 
-    def __init__(self, shuffle=False):
+    def __init__(self, shuffle=False, batch_size=100):
         """Initializes the Variant Generator.
 
         """
@@ -51,6 +51,7 @@ class BasicVariantGenerator(SearchAlgorithm):
         self._counter = 0
         self._finished = False
         self._shuffle = shuffle
+        self._batch_size = 100
 
         # Unique prefix for all trials generated, e.g., trial ids start as
         # 2f1e_00001, 2f1ef_00002, 2f1ef_0003, etc. Overridable for testing.
@@ -80,10 +81,15 @@ class BasicVariantGenerator(SearchAlgorithm):
         Returns:
             trials (list): Returns a list of trials.
         """
-        trials = list(self._trial_generator)
+        trials = []
+        for i in range(self._batch_size):
+            try:
+                trials.append(next(self._trial_generator))
+            except StopIteration:
+                self.set_finished()
+                break
         if self._shuffle:
             random.shuffle(trials)
-        self.set_finished()
         return trials
 
     def _generate_trials(self, num_samples, unresolved_spec, output_path=""):
