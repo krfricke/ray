@@ -1,6 +1,9 @@
 from __future__ import print_function
 
 import collections
+from typing import Callable
+
+from multiprocessing import Process, Queue
 import numpy as np
 import time
 
@@ -20,6 +23,31 @@ except ImportError:
     raise ImportError("ray.tune in ray > 0.7.5 requires 'tabulate'. "
                       "Please re-run 'pip install ray[tune]' or "
                       "'pip install ray[rllib]'.")
+
+
+class Delayed(Process):
+    def __init__(self, queue: Queue, fn: Callable, delay: int = 2):
+        self.queue = queue
+        self.fn = fn
+        self.delay = delay
+        super(Delayed, self).__init__()
+
+    def run(self):
+        while True:
+            while self.queue.empty():
+                time.sleep(0.1)
+            # Not empty anymore
+            # Sleep for delay, wait for messages to arrive
+            time.sleep(self.delay)
+
+            # Get last added message
+            msg = None
+            while not self.queue.empty():
+                msg = self.queue.get()
+
+            # Output message
+            if msg:
+                self.fn(msg)
 
 
 class ProgressReporter:
@@ -47,6 +75,11 @@ class ProgressReporter:
             done (bool): Whether this is the last progress report attempt.
             sys_info: System info.
         """
+        raise NotImplementedError
+
+    @staticmethod
+    def _display_message(message):
+        """Report a pre-formatted message"""
         raise NotImplementedError
 
 
@@ -108,10 +141,22 @@ class TuneReporterBase(ProgressReporter):
 
         self._max_report_freqency = max_report_frequency
         self._last_report_time = 0
+        self._last_trial_length = 0
+        self._report_queue = Queue()
+        self._report_delayer = Delayed(self._report_queue,
+                                       self._display_message)
+
+    def report_delayed(self, fn):
+        self._report_queue.put(fn)
+        if not self._report_delayer.is_alive():
+            self._report_delayer.start()
 
     def should_report(self, trials, done=False):
-        if time.time() - self._last_report_time > self._max_report_freqency:
+        trial_rows = min(len(trials), self._max_progress_rows)
+        if time.time() - self._last_report_time > self._max_report_freqency \
+           or trial_rows > self._last_trial_length:
             self._last_report_time = time.time()
+            self._last_trial_length = trial_rows
             return True
         return done
 
@@ -253,12 +298,17 @@ class JupyterNotebookReporter(TuneReporterBase):
 
     def report(self, trials, done, *sys_info):
         from IPython.display import clear_output
-        from IPython.core.display import display, HTML
-        if self._overwrite:
-            clear_output(wait=True)
+        from IPython.core.display import HTML
         progress_str = self._progress_str(
             trials, done, *sys_info, fmt="html", delim="<br>")
-        display(HTML(progress_str))
+        if self._overwrite:
+            clear_output(wait=True)
+        self.report_delayed(HTML(progress_str))
+
+    @staticmethod
+    def _display_message(message):
+        from IPython.core.display import display
+        display(message)
 
 
 class CLIReporter(TuneReporterBase):
@@ -296,7 +346,11 @@ class CLIReporter(TuneReporterBase):
                                           max_report_frequency)
 
     def report(self, trials, done, *sys_info):
-        print(self._progress_str(trials, done, *sys_info))
+        self.report_delayed(self._progress_str(trials, done, *sys_info))
+
+    @staticmethod
+    def _display_message(message):
+        print(message)
 
 
 def memory_debug_str():
