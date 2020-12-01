@@ -5,6 +5,7 @@ dragonfly-opt
 gluoncv
 gym[atari]
 GPy
+gpytorch==1.2.0
 h5py
 hpbandster
 hyperopt>=0.2.5
