@@ -464,6 +464,7 @@ class NodeInfoView(TUIPart):
             self.pos_y = -1
             self.frozen = False
             self.cached = None
+            self.sort_by = None
 
     def choose(self):
         if self.pos_y == -1:
@@ -507,7 +508,15 @@ class NodeInfoView(TUIPart):
                 _node_log(node.ip)
                 return
 
-            for worker in node.workers:
+            def _sort_key(w):
+                if self.sort_by == "cpu":
+                    return -w["cpuPercent"]
+                elif self.sort_by == "memory":
+                    return -w["memoryInfo"]["rss"]
+                else:
+                    return 0
+
+            for worker in sorted(node.workers, key=_sort_key):
                 sel += 1
                 if sel == self.pos_y:
                     _worker_log(node.ip, worker)
@@ -1200,7 +1209,7 @@ class Node:
             task.total = gpu_dict["memory_total"]
 
         plasma_used = self.raylet.get("objectStoreUsedMemory", 0)
-        plasma_avail = self.raylet.get("objectStoreAvailableMemory", 0)
+        plasma_avail = self.raylet.get("objectStoreAvailableMemory", 1e-5)
 
         self.plasma_task.completed = plasma_used / plasma_avail / 100
 
