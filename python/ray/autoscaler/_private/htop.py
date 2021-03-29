@@ -1130,6 +1130,21 @@ class Node:
 
         self.worker_progresses = {}
 
+        # --
+        self.bootTime = 0
+        self.cpu = None
+        self.cpus = (0, 0)
+        self.disk = {"/": {"percent": 0.}}
+        self.hostname = None
+        self.ip = None
+        self.mem = 0, 0, 0, 0  # total, available, pct, used
+        self.network = 0, 0  # sent, recv
+        self.now = 0
+        self.raylet = {}
+
+        self.logCount = 0
+        self.errorCount = 0
+
         if data:
             self.update(data)
 
